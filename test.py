@@ -1,8 +1,8 @@
 from webgebra import *
 
-x = Symbol('x')
-y = Symbol('y')
-z = Symbol('z')
-t = Symbol('t')
+for l in 'qwertyuiopasdfghjklzxcvbnm':
+    exec(l + "=Symbol('" + l +"')")
 
-print(der(x/x, x))
+f = 2+3*Sin(x)**2 - 1/Log(t**2 + x)
+ff = der(f, x)
+print(ff.simplify())

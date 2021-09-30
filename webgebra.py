@@ -76,7 +76,7 @@ class NumExp(Exp):
 
     def simplify(self):
         s = copy(self)
-        s.e = [i.simplify() if isinstance(i, NumExp) else i for i in self.e]
+        s.e = [i.simplify() if isinstance(i, NumExp) else copy(i) for i in self.e]
         return s.simp_f()
 
     def simp_f(self):
@@ -86,8 +86,8 @@ class NumExp(Exp):
         k = super().apply(*rules)
         return k.eval() if isinstance(k, NumExp) else k
 
-    def __eq__(self, other):
-        return Exp.__eq__(self, other) or other.__eq__(self)
+#    def __eq__(self, other):
+#        return Exp.__eq__(self, other) or other.__eq__(self)
         #this is because of cases like x == x^1 which would not be true if would be tested only by symbol's __eq__
 
     def __add__(self, other):
@@ -138,12 +138,12 @@ class NumExp(Exp):
         pass
 
 def is_num(x):
-    return isinstance(x, NumExp) or type(x) in [int, float, complex]
+    return type(x) in [int, float, complex]
 
 def der(exp, x):
-    if not is_num(exp):
+    if not (is_num(exp) or isinstance(exp, NumExp)):
         return NotImplemented
-    if not isinstance(exp, NumExp) or not exp.f_of(x):
+    if is_num(exp) or not exp.f_of(x):
         return 0
     return exp.der_rule(x)
 
@@ -240,6 +240,8 @@ class Neg(NumExp):
         return -self.e[0]
 
     def simp_f(self):
+        if type(self.e[0]) is Add:
+            return Add(*[-i for i in self.e[0].e])
         return self
 
     def __neg__(self):
@@ -366,14 +368,87 @@ class Power(NumExp):
             self.a = self.a.a
         return self
 
-    def __eq__(self, other):
-        return (self.b == 1 and self.a == other) or (self.b == -1 and other == 1/self.a) or super().__eq__(other)
+#    def __eq__(self, other):
+#        return (self.b == 1 and self.a == other) or (self.b == -1 and other == 1/self.a) or super().__eq__(other)
 
     def __str__(self):
         return str(self.a) + '^' + str(self.b)
 
     def der_rule(self, x):
-        return self.b*(self.a ** (self.b-1))
+        return self.b*(self.a ** (self.b-1))*der(self.a, x)
+
+class ElemFunc(NumExp):
+    def __init__(self, f, x):
+        super().__init__([x])
+        self.f = f
+        self.x = x
+
+    def eval(self):
+        if is_num(self.x):
+            return self.f(self.x)
+        else:
+            return self
+
+    def simp_f(self):
+        return self
+
+    def der_rule(self, x):
+        return self.f_der()*der(self.x, x)
+
+    def f_der(self):
+        pass
+
+    def __str__(self):
+        return type(self).__name__ + '(' + str(self.x) + ')'
+
+########### Elementary funtions ###############
+from cmath import sin, cos, tan, atan, exp, log
+
+#power should also maybe be an elem func
+
+class Sin(ElemFunc):
+    def __init__(self, x):
+        super().__init__(sin, x)
+
+    def f_der(self):
+        return Cos(self.x)
+
+class Cos(ElemFunc):
+    def __init__(self, x):
+        super().__init__(cos, x)
+
+    def f_der(self):
+        return -Sin(self.x)
+
+class Tan(ElemFunc):
+    def __init__(self, x):
+        super().__init__(tan, x)
+
+    def f_der(self):
+        return 1/(Cos(self.x)**2)
+
+class Atan(ElemFunc):
+    def __init__(self, x):
+        super().__init__(atan, x)
+
+    def f_der(self):
+        return 1/(1+self.x**2)
+
+class Exp(ElemFunc):
+    def __init__(self, x):
+        super().__init__(exp, x)
+
+    def f_der(self):
+        return Exp(self.x)
+
+class Log(ElemFunc):
+    def __init__(self, x):
+        super().__init__(log, x)
+
+    def f_der(self):
+        return 1/self.x
+
+###############################################
 
 ################ FORMULAE #####################
 
@@ -381,13 +456,5 @@ def quad(a, b, c):
     x1 = (-b + (b ** 2 - 4 * a * c) ** (1 / 2)) / (2 * a)
     x2 = (-b - (b ** 2 - 4 * a * c) ** (1 / 2)) / (2 * a)
     return (x1, x2)
-
-
-
-
-
-
-
-
 
 ################################################
