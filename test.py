@@ -5,5 +5,5 @@ y = Symbol('y')
 z = Symbol('z')
 t = Symbol('t')
 
-t = x +y +-z + x + t
-print(t | [x >> 2, z >> -4])
+s = (x*y + z*y + x*z)/ x
+print(x == x**1)

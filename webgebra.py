@@ -7,15 +7,16 @@ class Exp:
     def __eq__(self, other):
         return type(self) == type(other) and self.e == other.e
 
-    def apply(self, rules: list, rec=False):
+    def apply(self, *rules: list):
         for r in rules:
+            assert type(r) is Rule
             if self == r.a:
                 return r.b
-        s = self if rec else copy(self)
+        s = copy(self)
         s.e = self.e[:]
         for i in range(len(s.e)):
             if isinstance(s.e[i], Exp):
-                s.e[i] = s.e[i].apply(rules, rec=True)
+                s.e[i] = s.e[i].apply(*rules)
             else:
                 for r in rules:
                     if s.e[i] == r.a:
@@ -32,7 +33,7 @@ class Exp:
 
     def __or__(self, rules):
         if type(rules) != list: rules = [rules]
-        return self.apply(rules)
+        return self.apply(*rules)
 
 class Rule:
     def __init__(self, a, b):
@@ -47,14 +48,13 @@ class CommExp(Exp):
         super().__init__(e)
 
     def __eq__(self, other):
-        return type(self) == type(other) and CommExp.comp_e(self.e, other.e)
-
-    def comp_e(e1, e2):
-        if len(e1) != len(e2): return False
-        for e in e1:
-            if e not in e2:
-                return False
-        return True
+        if type(self) != type(other): return False
+        if len(self.e) != len(other.e): return False
+        t = other.e[:]
+        for i in self.e:
+            try: t.remove(i)
+            except: return False
+        return len(t) == 0
 
 class AssocExp(Exp):
     def __init__(self, e):
@@ -74,17 +74,21 @@ class NumExp(Exp):
     def eval(self):
         pass
 
-    def simplify(self, rec=False):
-        s = copy(self) if not rec else self
-        s.e = [i.simplify(True) for i in self.e]
+    def simplify(self):
+        s = copy(self)
+        s.e = [i.simplify() if isinstance(i, NumExp) else i for i in self.e]
         return s.simp_f()
 
     def simp_f(self):
         pass
 
-    def apply(self, rules: list, rec=False):
-        k = super().apply(rules, rec=rec)
+    def apply(self, *rules: list):
+        k = super().apply(*rules)
         return k.eval() if isinstance(k, NumExp) else k
+
+    def __eq__(self, other):
+        return Exp.__eq__(self, other) or other.__eq__(self)
+        #this is because of cases like x == x^1 which would not be true if would be tested only by symbol's __eq__
 
     def __add__(self, other):
         return Add(self, other)
@@ -95,11 +99,37 @@ class NumExp(Exp):
     def __neg__(self):
         return Neg(self)
 
+    def __sub__(self, other):
+        return self + -other
+
+    def __rsub__(self, other):
+        return other + -self
+
     def __mul__(self, other):
         return Mult(self, other)
 
     def __rmul__(self, other):
         return Mult(other, self)
+
+    def __truediv__(self, other):
+        return Fraction(self, other)
+
+    def __rtruediv__(self, other):
+        return Fraction(other, self)
+
+    def __pow__(self, other):
+        return Power(self, other)
+
+    def __rpow__(self, other):
+        return Power(other, self)
+
+    #latex
+    def __lat__(self):
+        return str(self)
+
+    #derivative
+    def der(self):
+        pass
 
 class Symbol(NumExp):
     def __init__(self, ch):
@@ -116,7 +146,7 @@ class Symbol(NumExp):
         return self.ch
 
     def __eq__(self, other):
-        return type(other) == Symbol and self.ch == other.ch
+        return (type(other) == Symbol and self.ch == other.ch) or other.__eq__(self)
 
 class Add(AssocExp, CommExp, NumExp):
     def __init__(self, *e):
@@ -132,6 +162,7 @@ class Add(AssocExp, CommExp, NumExp):
         return sum(self.e)
 
     def simp_f(self):
+        # delete a - a
         i = 0
         while i < len(self.e) - 1:
             j = i + 1
@@ -144,6 +175,24 @@ class Add(AssocExp, CommExp, NumExp):
                     break
                 j += 1
             i += 1
+        if len(self.e) == 0:
+            return 0
+
+        # convert a + a + ... + a -> n a
+        i = 0
+        while i < len(self.e) - 1:
+            j = i + 1
+            c = 1
+            while j < len(self.e):
+                if self.e[i] == self.e[j]:
+                    c += 1
+                    del self.e[j]
+                    j -= 1
+                j += 1
+            if c > 1:
+                self.e[i] = c*self.e[i]
+            i += 1
+
         return self
 
 class Neg(NumExp):
@@ -169,7 +218,7 @@ class Mult(AssocExp, CommExp, NumExp):
     def __str__(self):
         r = ''
         for i in self.e:
-            r += str(i) + ' '
+            r += str(i) + '*'
         return r[:-1]
 
     def eval(self):
@@ -179,5 +228,98 @@ class Mult(AssocExp, CommExp, NumExp):
         return r
 
     def simp_f(self):
-        pass
+        for i in self.e:
+            if i == 0:
+                return 0
+
+        #a * 1/a -> 1
+        i = 0
+        while i < len(self.e) - 1:
+            j = i + 1
+            n1 = 1/self.e[i]
+            n2 = self.e[i] ** -1
+            while j < len(self.e):
+                if n1 == self.e[j] or n2 == self.e[j]:
+                    del self.e[j]
+                    self.e[i] = 1
+                    break
+                j += 1
+            i += 1
+
+        #1*a*b*1 -> a*b
+        i = 0
+        while i < len(self.e) and len(self.e) > 1:
+            if self.e[i] == 1:
+                del self.e[i]
+                i -= 1
+            i += 1
+
+        if len(self.e) == 1:
+            return self.e[0]
         return self
+
+    #maybe expand should be a general function of NumExp
+    def expand(self): #distribute
+        for i in self.e:
+            if type(i) is Add:
+                t = self.e[:]
+                t.remove(i)
+                return Add(*[Mult(*(t + [x])) for x in i.e])
+        return self
+
+
+class Fraction(NumExp):
+    def __init__(self, a, b):
+        super().__init__([a, b])
+        self.a = a
+        self.b = b
+
+    def eval(self):
+        return self.a / self.b
+
+    def simp_f(self):
+        return (self.a * (self.b ** -1)).expand().simplify()
+
+    def __str__(self):
+        return str(self.a) + '/' + str(self.b)
+
+class Power(NumExp):
+    def __init__(self, a, b):
+        super().__init__([a, b])
+        self.a = a
+        self.b = b
+        self.simp_f() # maybe all num exp should simp in init (then should move self.a, self.b before super(), because it's used in simp_f)
+
+    def eval(self):
+        return self.a ** self.b
+
+    def simp_f(self):
+        if self.b == 1:
+            return self.a
+        if type(self.a) is Power:
+            self.b *= self.a.b
+            self.a = self.a.a
+        return self
+
+    def __eq__(self, other):
+        return (self.b == 1 and self.a == other) or (self.b == -1 and other == 1/self.a) or super().__eq__(other)
+
+    def __str__(self):
+        return str(self.a) + '^' + str(self.b)
+
+################ FORMULAE #####################
+
+def quad(a, b, c):
+    x1 = (-b + (b ** 2 - 4 * a * c) ** (1 / 2)) / (2 * a)
+    x2 = (-b - (b ** 2 - 4 * a * c) ** (1 / 2)) / (2 * a)
+    return (x1, x2)
+
+
+
+
+
+
+
+
+
+################################################
