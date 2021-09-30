@@ -5,5 +5,4 @@ y = Symbol('y')
 z = Symbol('z')
 t = Symbol('t')
 
-s = (x*y + z*y + x*z)/ x
-print(x == x**1)
+print(der(x/x, x))

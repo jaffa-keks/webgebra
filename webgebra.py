@@ -127,9 +127,25 @@ class NumExp(Exp):
     def __lat__(self):
         return str(self)
 
-    #derivative
-    def der(self):
+    def f_of(self, x):
+        if self == x:
+            return True
+        for i in self.e:
+            if isinstance(i, NumExp) and i.f_of(x): return True
+        return False
+
+    def der_rule(self, x):
         pass
+
+def is_num(x):
+    return isinstance(x, NumExp) or type(x) in [int, float, complex]
+
+def der(exp, x):
+    if not is_num(exp):
+        return NotImplemented
+    if not isinstance(exp, NumExp) or not exp.f_of(x):
+        return 0
+    return exp.der_rule(x)
 
 class Symbol(NumExp):
     def __init__(self, ch):
@@ -146,7 +162,11 @@ class Symbol(NumExp):
         return self.ch
 
     def __eq__(self, other):
-        return (type(other) == Symbol and self.ch == other.ch) or other.__eq__(self)
+        return type(other) == Symbol and self.ch == other.ch
+
+    def der_rule(self, x):
+        assert self == x
+        return 1
 
 class Add(AssocExp, CommExp, NumExp):
     def __init__(self, *e):
@@ -175,6 +195,14 @@ class Add(AssocExp, CommExp, NumExp):
                     break
                 j += 1
             i += 1
+
+        i = 0
+        while i < len(self.e):
+            if self.e[i] == 0:
+                del self.e[i]
+                i -= 1
+            i += 1
+
         if len(self.e) == 0:
             return 0
 
@@ -193,7 +221,13 @@ class Add(AssocExp, CommExp, NumExp):
                 self.e[i] = c*self.e[i]
             i += 1
 
+        if len(self.e) == 1:
+            return self.e[0]
+
         return self
+
+    def der_rule(self, x):
+        return Add(*[der(i, x) for i in self.e])
 
 class Neg(NumExp):
     def __init__(self, e):
@@ -210,6 +244,9 @@ class Neg(NumExp):
 
     def __neg__(self):
         return self.e[0]
+
+    def der_rule(self, x):
+        return -der(self.e[0], x)
 
 class Mult(AssocExp, CommExp, NumExp):
     def __init__(self, *e):
@@ -248,10 +285,28 @@ class Mult(AssocExp, CommExp, NumExp):
 
         #1*a*b*1 -> a*b
         i = 0
-        while i < len(self.e) and len(self.e) > 1:
+        while i < len(self.e):
             if self.e[i] == 1:
                 del self.e[i]
                 i -= 1
+            i += 1
+
+        if len(self.e) == 0:
+            return 1
+
+        # convert a a ... a -> a^n
+        i = 0
+        while i < len(self.e) - 1:
+            j = i + 1
+            c = 1
+            while j < len(self.e):
+                if self.e[i] == self.e[j]:
+                    c += 1
+                    del self.e[j]
+                    j -= 1
+                j += 1
+            if c > 1:
+                self.e[i] = self.e[i] ** c
             i += 1
 
         if len(self.e) == 1:
@@ -267,6 +322,13 @@ class Mult(AssocExp, CommExp, NumExp):
                 return Add(*[Mult(*(t + [x])) for x in i.e])
         return self
 
+    def der_rule(self, x):
+        s = []
+        for i in range(len(self.e)):
+            t = self.e[:]
+            t[i] = der(t[i], x)
+            s.append(Mult(*t))
+        return Add(*s)
 
 class Fraction(NumExp):
     def __init__(self, a, b):
@@ -282,6 +344,9 @@ class Fraction(NumExp):
 
     def __str__(self):
         return str(self.a) + '/' + str(self.b)
+
+    def der_rule(self, x):
+        return Fraction(der(self.a, x)*self.b - self.a*der(self.b, x), self.b**2)
 
 class Power(NumExp):
     def __init__(self, a, b):
@@ -306,6 +371,9 @@ class Power(NumExp):
 
     def __str__(self):
         return str(self.a) + '^' + str(self.b)
+
+    def der_rule(self, x):
+        return self.b*(self.a ** (self.b-1))
 
 ################ FORMULAE #####################
 
