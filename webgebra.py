@@ -67,11 +67,17 @@ class AssocExp(Exp):
             else: r += i.e
         return r
 
+lat = True
+
 class NumExp(Exp):
     def __init__(self, e):
         super().__init__(e)
 
     def eval(self):
+        pass
+
+    #returns precedence (4 = sym;func , 3 = pow, 2 = mul, 1 = add; neg)
+    def prec(self):
         pass
 
     def simplify(self):
@@ -123,6 +129,11 @@ class NumExp(Exp):
     def __rpow__(self, other):
         return Power(other, self)
 
+    def to_str(self, e):
+        if not isinstance(e, NumExp) or e.prec() > self.prec():
+            return str(e)
+        return ('\\left(' + str(e) + '\\right)') if lat else '(' + str(e) + ')'
+
     #latex
     def __lat__(self):
         return str(self)
@@ -152,6 +163,9 @@ class Symbol(NumExp):
         super().__init__([])
         self.ch = ch
 
+    def prec(self):
+        return 4
+
     def eval(self):
         return self
 
@@ -172,10 +186,13 @@ class Add(AssocExp, CommExp, NumExp):
     def __init__(self, *e):
         super().__init__(list(e))
 
+    def prec(self):
+        return 1
+
     def __str__(self):
         r = ''
         for i in self.e:
-            r += str(i) + '+'
+            r += self.to_str(i) + '+' # can also just str(i) because add is lowest precidence
         return r[:-1]
 
     def eval(self):
@@ -233,8 +250,11 @@ class Neg(NumExp):
     def __init__(self, e):
         super().__init__([e])
 
+    def prec(self):
+        return 1
+
     def __str__(self):
-        return '-' + str(self.e[0])
+        return '-' + self.to_str(self.e[0])
 
     def eval(self):
         return -self.e[0]
@@ -254,10 +274,13 @@ class Mult(AssocExp, CommExp, NumExp):
     def __init__(self, *e):
         super().__init__(list(e))
 
+    def prec(self):
+        return 2
+
     def __str__(self):
         r = ''
         for i in self.e:
-            r += str(i) + '*'
+            r += self.to_str(i) + ('*' if not lat else '')
         return r[:-1]
 
     def eval(self):
@@ -338,14 +361,23 @@ class Fraction(NumExp):
         self.a = a
         self.b = b
 
+    def prec(self):
+        return 2
+
     def eval(self):
         return self.a / self.b
 
     def simp_f(self):
-        return (self.a * (self.b ** -1)).expand().simplify()
+        if self.a == 1: return self
+        return (self.a * (1/self.b)).expand().simplify()
+        #return (self.a * (self.b ** -1)).expand().simplify()
 
     def __str__(self):
-        return str(self.a) + '/' + str(self.b)
+        if lat: return self.__lat__()
+        return self.to_str(self.a) + '/' + self.to_str(self.b)
+
+    def __lat__(self):
+        return '\\frac{' + self.to_str(self.a) +'}{' + self.to_str(self.b) + '}'
 
     def der_rule(self, x):
         return Fraction(der(self.a, x)*self.b - self.a*der(self.b, x), self.b**2)
@@ -356,6 +388,9 @@ class Power(NumExp):
         self.a = a
         self.b = b
         self.simp_f() # maybe all num exp should simp in init (then should move self.a, self.b before super(), because it's used in simp_f)
+
+    def prec(self):
+        return 3
 
     def eval(self):
         return self.a ** self.b
@@ -372,16 +407,24 @@ class Power(NumExp):
 #        return (self.b == 1 and self.a == other) or (self.b == -1 and other == 1/self.a) or super().__eq__(other)
 
     def __str__(self):
-        return str(self.a) + '^' + str(self.b)
+        if lat: return self.__lat__()
+        return self.to_str(self.a) + '^' + self.to_str(self.b)
+
+    def __lat__(self):
+        return self.to_str(self.a) + '^{' + self.to_str(self.b) + '}'
 
     def der_rule(self, x):
         return self.b*(self.a ** (self.b-1))*der(self.a, x)
 
 class ElemFunc(NumExp):
     def __init__(self, f, x):
+        assert isinstance(x, NumExp) or is_num(x) # maybe not needed (for now needed because of __lat__ in elemfunc)
         super().__init__([x])
         self.f = f
         self.x = x
+
+    def prec(self):
+        return 4
 
     def eval(self):
         if is_num(self.x):
@@ -399,10 +442,14 @@ class ElemFunc(NumExp):
         pass
 
     def __str__(self):
-        return type(self).__name__ + '(' + str(self.x) + ')'
+        if lat: return self.__lat__()
+        return type(self).__name__.lower() + '(' + str(self.x) + ')'
+
+    def __lat__(self):
+        return type(self).__name__.lower() + '\\left(' + str(self.x) + '\\right)'
 
 ########### Elementary funtions ###############
-from cmath import sin, cos, tan, atan, exp, log
+from cmath import sin, cos, tan, atan, exp, log, sqrt
 
 #power should also maybe be an elem func
 
@@ -447,6 +494,16 @@ class Log(ElemFunc):
 
     def f_der(self):
         return 1/self.x
+
+class Sqrt(ElemFunc):
+    def __init__(self, x):
+        super().__init__(sqrt, x)
+
+    def f_der(self):
+        return 1/(2*Sqrt(self.x))
+
+    def __lat__(self):
+        return '\\sqrt{' + self.to_str(self.x) + '}'
 
 ###############################################
 
