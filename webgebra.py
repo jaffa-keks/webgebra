@@ -1,6 +1,6 @@
 from copy import copy
 
-class Exp:
+class Expr:
     def __init__(self, e : list):
         self.e = e
 
@@ -15,7 +15,7 @@ class Exp:
         s = copy(self)
         s.e = self.e[:]
         for i in range(len(s.e)):
-            if isinstance(s.e[i], Exp):
+            if isinstance(s.e[i], Expr):
                 s.e[i] = s.e[i].apply(*rules)
             else:
                 for r in rules:
@@ -24,7 +24,7 @@ class Exp:
         return s
 
     def __str__(self):
-        r = 'Exp['
+        r = 'Expr['
         for i in self.e: r += str(i) + ', '
         return r[:-2] + ']'
 
@@ -35,6 +35,53 @@ class Exp:
         if type(rules) != list: rules = [rules]
         return self.apply(*rules)
 
+    def f_of(self, x):
+        if self == x:
+            return True
+        for i in self.e:
+            if isinstance(i, Expr) and i.f_of(x): return True
+        return False
+
+class Function:
+    def __init__(self, *args):
+        self.args = args
+        self.exp = None
+
+    def __eq__(self, other):
+        if self.exp == None:
+            if isinstance(other, Expr):
+                for i in self.args:
+                    if not other.f_of(i): return False
+                self.exp = other
+                return True
+            elif isinstance(other, Function):
+                if self.args == other.args:
+                    self.exp = other.exp
+                    return True
+                return False
+        else:
+            if isinstance(other, Expr):
+                return self.exp == other
+            elif isinstance(other, Function):
+                return self.args == other.args and self.exp == other.exp
+        return False
+
+    def __str__(self):
+        s = 'f('
+        for i in self.args: s += str(i) + ','
+        return s[:-1] + ')'
+
+    def at(self, *args):
+        if self.exp == None:
+            return None
+        assert len(args) == len(self.args)
+        return self.exp.apply(*[Rule(self.args[i], args[i]) for i in range(len(self.args))])
+
+    def __call__(self, *args, **kwargs):
+        return self.at(*args)
+
+F = Function
+
 class Rule:
     def __init__(self, a, b):
         self.a = a
@@ -43,7 +90,7 @@ class Rule:
     def __str__(self):
         return str(self.a) + '->' + str(self.b)
 
-class CommExp(Exp):
+class CommExp(Expr):
     def __init__(self, e):
         super().__init__(e)
 
@@ -56,7 +103,7 @@ class CommExp(Exp):
             except: return False
         return len(t) == 0
 
-class AssocExp(Exp):
+class AssocExp(Expr):
     def __init__(self, e):
         super().__init__(self.flatten(e))
 
@@ -67,9 +114,9 @@ class AssocExp(Exp):
             else: r += i.e
         return r
 
-lat = True
+lat = False
 
-class NumExp(Exp):
+class NumExp(Expr):
     def __init__(self, e):
         super().__init__(e)
 
@@ -93,7 +140,7 @@ class NumExp(Exp):
         return k.eval() if isinstance(k, NumExp) else k
 
 #    def __eq__(self, other):
-#        return Exp.__eq__(self, other) or other.__eq__(self)
+#        return Expr.__eq__(self, other) or other.__eq__(self)
         #this is because of cases like x == x^1 which would not be true if would be tested only by symbol's __eq__
 
     def __add__(self, other):
@@ -137,13 +184,6 @@ class NumExp(Exp):
     #latex
     def __lat__(self):
         return str(self)
-
-    def f_of(self, x):
-        if self == x:
-            return True
-        for i in self.e:
-            if isinstance(i, NumExp) and i.f_of(x): return True
-        return False
 
     def der_rule(self, x):
         pass
