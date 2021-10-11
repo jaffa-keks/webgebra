@@ -1,11 +1,11 @@
 from webgebra import *
 
 for l in 'qwertyuiopasdfghjklzxcvbnm':
-    exec(l + "=Symbol('" + l +"')")
+    exec(l + "=NumSym('" + l +"')")
 
-f = F(x, y)
-f == x + y
+k_ = AbsSym('k')
 
-print(f, f(a, b), f(6, 7))
+f = F(x)
+f == x*a
 
-# for some reason add is numexp but not exp
+print(f(x) | k_*x >> x**k_)

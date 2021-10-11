@@ -1,1 +1,3 @@
 set minimum of add, mult... to 2
+
+make abs sym that can replace associative (ex. -> can replace a+b in a+b+c if rule is x_ + c)

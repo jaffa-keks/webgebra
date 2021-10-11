@@ -10,8 +10,8 @@ class Expr:
     def apply(self, *rules: list):
         for r in rules:
             assert type(r) is Rule
-            if self == r.a:
-                return r.b
+            if r.a == self:
+                return r.eval()
         s = copy(self)
         s.e = self.e[:]
         for i in range(len(s.e)):
@@ -19,8 +19,8 @@ class Expr:
                 s.e[i] = s.e[i].apply(*rules)
             else:
                 for r in rules:
-                    if s.e[i] == r.a:
-                        s.e[i] = r.b
+                    if r.a == s.e[i]:
+                        s.e[i] = r.eval()
         return s
 
     def __str__(self):
@@ -41,6 +41,16 @@ class Expr:
         for i in self.e:
             if isinstance(i, Expr) and i.f_of(x): return True
         return False
+
+class Symbol:
+    def __init__(self, ch):
+        self.ch = ch
+
+    def __str__(self):
+        return self.ch
+
+    def __eq__(self, other):
+        return isinstance(other, Symbol) and self.ch == other.ch
 
 class Function:
     def __init__(self, *args):
@@ -82,13 +92,41 @@ class Function:
 
 F = Function
 
+class AbsSym:
+    def __init__(self, ch):
+        self.ch = ch
+
+    def __str__(self):
+        return self.ch + '_'
+
+    def __eq__(self, other):
+        self.img = other
+        return True
+
 class Rule:
     def __init__(self, a, b):
         self.a = a
         self.b = b
+        self.has_abs = self.check_abs(self.b) #check for AbsSym in self.b (image)
 
     def __str__(self):
         return str(self.a) + '->' + str(self.b)
+
+    def check_abs(self, expr):
+        if isinstance(expr, AbsSym): return True
+        if not isinstance(expr, Expr): return False
+        for i in expr.e:
+            if self.check_abs(i): return True
+        return False
+
+    def eval(self, expr=None):
+        if not self.has_abs: return self.b
+        if expr is None: expr = self.b
+        if isinstance(expr, AbsSym): return expr.img
+        if not isinstance(expr, Expr): return expr
+        e = copy(expr)
+        e.e = [self.eval(i) for i in expr.e]
+        return e
 
 class CommExp(Expr):
     def __init__(self, e):
@@ -97,11 +135,18 @@ class CommExp(Expr):
     def __eq__(self, other):
         if type(self) != type(other): return False
         if len(self.e) != len(other.e): return False
-        t = other.e[:]
-        for i in self.e:
+        t = CommExp.sort_abs(self.e) # assumes AbsSym are always in self.e and not other.e
+        for i in other.e:
             try: t.remove(i)
             except: return False
         return len(t) == 0
+
+    def sort_abs(t):
+        k = []
+        for i in t:
+            if isinstance(i, AbsSym): k.append(i)
+            else: k.insert(0, i)
+        return k
 
 class AssocExp(Expr):
     def __init__(self, e):
@@ -198,10 +243,10 @@ def der(exp, x):
         return 0
     return exp.der_rule(x)
 
-class Symbol(NumExp):
+class NumSym(Symbol, NumExp):
     def __init__(self, ch):
-        super().__init__([])
-        self.ch = ch
+        super().__init__(ch)
+        self.e = []
 
     def prec(self):
         return 4
@@ -211,12 +256,6 @@ class Symbol(NumExp):
 
     def simp_f(self):
         return self
-
-    def __str__(self):
-        return self.ch
-
-    def __eq__(self, other):
-        return type(other) == Symbol and self.ch == other.ch
 
     def der_rule(self, x):
         assert self == x
@@ -236,7 +275,10 @@ class Add(AssocExp, CommExp, NumExp):
         return r[:-1]
 
     def eval(self):
-        return sum(self.e)
+        if len(self.e) == 0: return 0
+        s = self.e[0]
+        for i in self.e[1:]: s+= i
+        return s
 
     def simp_f(self):
         # delete a - a
@@ -324,9 +366,9 @@ class Mult(AssocExp, CommExp, NumExp):
         return r[:-1]
 
     def eval(self):
-        r=1
-        for i in self.e:
-            r *= i
+        if len(self.e) == 0: return 1
+        r = self.e[0]
+        for i in self.e[1:]: r *= i
         return r
 
     def simp_f(self):
@@ -398,63 +440,59 @@ class Mult(AssocExp, CommExp, NumExp):
 class Fraction(NumExp):
     def __init__(self, a, b):
         super().__init__([a, b])
-        self.a = a
-        self.b = b
 
     def prec(self):
         return 2
 
     def eval(self):
-        return self.a / self.b
+        return self.e[0] / self.e[1]
 
     def simp_f(self):
-        if self.a == 1: return self
-        return (self.a * (1/self.b)).expand().simplify()
-        #return (self.a * (self.b ** -1)).expand().simplify()
+        if self.e[0] == 1: return self
+        return (self.e[0] * (1/self.e[1])).expand().simplify()
+        #return (self.e[0] * (self.e[1] ** -1)).expand().simplify()
 
     def __str__(self):
         if lat: return self.__lat__()
-        return self.to_str(self.a) + '/' + self.to_str(self.b)
+        return self.to_str(self.e[0]) + '/' + self.to_str(self.e[1])
 
     def __lat__(self):
-        return '\\frac{' + self.to_str(self.a) +'}{' + self.to_str(self.b) + '}'
+        return '\\frac{' + self.to_str(self.e[0]) +'}{' + self.to_str(self.e[1]) + '}'
 
     def der_rule(self, x):
-        return Fraction(der(self.a, x)*self.b - self.a*der(self.b, x), self.b**2)
+        return Fraction(der(self.e[0], x)*self.e[1] - self.e[0]*der(self.e[1], x), self.e[1]**2)
 
 class Power(NumExp):
     def __init__(self, a, b):
         super().__init__([a, b])
-        self.a = a
-        self.b = b
         self.simp_f() # maybe all num exp should simp in init (then should move self.a, self.b before super(), because it's used in simp_f)
 
     def prec(self):
         return 3
 
     def eval(self):
-        return self.a ** self.b
+        return self.e[0] ** self.e[1]
 
     def simp_f(self):
-        if self.b == 1:
-            return self.a
-        if type(self.a) is Power:
-            self.b *= self.a.b
-            self.a = self.a.a
+        if self.e[1] == 1:
+            return self.e[0]
+        if type(self.e[0]) is Power:
+            self.e[1] *= self.e[0].e[1]
+            self.e[0] = self.e[0].e[0]
         return self
 
 #    def __eq__(self, other):
-#        return (self.b == 1 and self.a == other) or (self.b == -1 and other == 1/self.a) or super().__eq__(other)
+#        return (self.e[1] == 1 and self.e[0] == other) or (self.e[1] == -1 and other == 1/self.e[0]) or super().__eq__(other)
 
     def __str__(self):
         if lat: return self.__lat__()
-        return self.to_str(self.a) + '^' + self.to_str(self.b)
+        return self.to_str(self.e[0]) + '^' + self.to_str(self.e[1])
 
     def __lat__(self):
-        return self.to_str(self.a) + '^{' + self.to_str(self.b) + '}'
+        return self.to_str(self.e[0]) + '^{' + self.to_str(self.e[1]) + '}'
 
     def der_rule(self, x):
-        return self.b*(self.a ** (self.b-1))*der(self.a, x)
+        return self.e[1]*(self.e[0] ** (self.e[1]-1))*der(self.e[0], x)
 
 class ElemFunc(NumExp):
     def __init__(self, f, x):
