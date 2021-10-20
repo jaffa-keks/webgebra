@@ -1,3 +1,11 @@
 set minimum of add, mult... to 2
 
 make abs sym that can replace associative (ex. -> can replace a+b in a+b+c if rule is x_ + c)
+
+make num exp convertable to lambda (numexp has lam(self) function)
+
+fix latex
+
+Function shoudl extends NumExp, Mapping
+
+in assoc exp work on identity elements

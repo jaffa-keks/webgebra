@@ -3,9 +3,7 @@ from webgebra import *
 for l in 'qwertyuiopasdfghjklzxcvbnm':
     exec(l + "=NumSym('" + l +"')")
 
-k_ = AbsSym('k')
+g1 = F(s)
+g1 == 0.5/(50*s + 1)
 
-f = F(x)
-f == x*a
-
-print(f(x) | k_*x >> x**k_)
+print(g1(s))
