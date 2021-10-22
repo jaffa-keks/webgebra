@@ -1,9 +1,10 @@
 from webgebra import *
 
-for l in 'qwertyuiopasdfghjklzxcvbnm':
-    exec(l + "=NumSym('" + l +"')")
+x, y, z, s, w = S('x y z s w')
+a,b,c,d,e,f = S('a b c d e f')
+x_, y_, z_ = AS('x y z')
 
-g1 = F(s)
-g1 == 0.5/(50*s + 1)
+h1 = a+b+c+a+c
+m = x_ + c + x_
 
-print(g1(s))
+print(m == h1, h1 | m >> x_*2)

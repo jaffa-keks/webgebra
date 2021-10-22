@@ -98,13 +98,16 @@ class Function:
 class AbsSym:
     def __init__(self, ch):
         self.ch = ch
+        self.img = None
 
     def __str__(self):
         return self.ch + '_'
 
     def __eq__(self, other):
-        self.img = other
-        return True
+        if self.img is None:
+            self.img = other
+            return True
+        return self.img == other
 
 class Rule:
     def __init__(self, a, b):
@@ -116,7 +119,9 @@ class Rule:
         return str(self.a) + '->' + str(self.b)
 
     def check_abs(self, expr):
-        if isinstance(expr, AbsSym): return True
+        if isinstance(expr, AbsSym): # AbsSym img is reset on rule creation
+            expr.img = None
+            return True
         if not isinstance(expr, Expr): return False
         for i in expr.e:
             if self.check_abs(i): return True
@@ -162,17 +167,51 @@ class AssocExp(Expr):
             else: r += i.e
         return r
 
+    def __eq__(self, other):
+        if type(other) != type(self): return False
+        j = 0
+        lr = []
+        for i in range(len(self.e)):
+            if isinstance(self.e[i], AbsSym): continue
+            j0 = j
+            while j <= len(other.e):
+                if len(other.e) - j < len(self.e) - i:
+                    return False
+                if self.e[i] == other.e[j]:
+                    if j < i: return False
+                    if j-j0 > 0: lr.append((j0, j))
+                    j += 1
+                    break
+                j += 1
+        if j < len(other.e) and not isinstance(self.e[-1], AbsSym):
+            return False
+        if j < len(other.e): lr.append((j, len(other.e)))
+        l = 0
+        for i in self.e:
+            if not isinstance(i, AbsSym): continue
+            c = copy(self)
+            c.e = other.e[lr[l][0]:lr[l][1]]
+            #i.img = c
+            if i != c: return False
+            l += 1
+        return True
+
 #sub expr of NumExp should be NumExp
 class NumExp(Expr):
     def __init__(self, e):
         super().__init__(e)
 
-    def eval(self):
-        pass
-
     #returns precedence (4 = sym;func , 3 = pow, 2 = mul, 1 = add; neg)
     def prec(self):
         pass
+
+    def eval(self):
+        s = copy(self)
+        s.e = [i.eval() if isinstance(i, NumExp) else copy(i) for i in self.e]
+        return s.eval_f()
+
+    def eval_f(self):
+        return self # maybe should be pass (for mandatory override)
 
     def simplify(self):
         s = copy(self)
@@ -181,6 +220,12 @@ class NumExp(Expr):
 
     def simp_f(self):
         pass
+
+    #maybe expand should also be modeled with expand_f
+    def expand(self):
+        s = copy(self)
+        s.e = [i.expand().eval() if isinstance(i, NumExp) else copy(i) for i in self.e]
+        return s
 
     def apply(self, *rules: list):
         k = super().apply(*rules)
@@ -224,20 +269,20 @@ class NumExp(Expr):
         return Power(other, self)
 
     def __repr__(self): # for ipython (notebook)
-        try:
+        if GLOBAL_LATEX:
             from IPython.display import Latex, display
-            display(Latex('$$' + self.lat().replace('$$', '') + '$$'))
-        except:
-            pass
+            display(Latex('$$' + str(self).replace('$$', '') + '$$'))
         return super().__repr__()
 
     def __str__(self):
+        if GLOBAL_LATEX:
+            return self.lat()
         return self.nstr()
 
     def prec_str(self, e): # e is child NumExp
         if not isinstance(e, NumExp) or e.prec() > self.prec():
             return str(e)
-        return ('\\left(' + str(e) + '\\right)') if lat else '(' + str(e) + ')'
+        return ('\\left(' + str(e) + '\\right)') if GLOBAL_LATEX else '(' + str(e) + ')'
 
     def nstr(self): #num exp string
         pass
@@ -267,9 +312,6 @@ class NumSym(Symbol, NumExp):
     def prec(self):
         return 4
 
-    def eval(self):
-        return self
-
     def simp_f(self):
         return self
 
@@ -278,6 +320,19 @@ class NumSym(Symbol, NumExp):
         return 1
 
     def nstr(self):
+        return self.ch
+
+class NumAbsSym(AbsSym, NumExp):
+    def __init__(self, ch):
+        super().__init__(ch)
+
+    def prec(self):
+        return 4
+
+    def nstr(self):
+        return self.ch + '_'
+
+    def lat(self):
         return self.ch
 
 class Add(AssocExp, CommExp, NumExp):
@@ -293,7 +348,7 @@ class Add(AssocExp, CommExp, NumExp):
             r += self.prec_str(i) + '+' # can also just str(i) because add is lowest precidence
         return r[:-1]
 
-    def eval(self):
+    def eval_f(self):
         if len(self.e) == 0: return 0
         s = self.e[0]
         for i in self.e[1:]: s+= i
@@ -357,7 +412,7 @@ class Neg(NumExp):
     def nstr(self):
         return '-' + self.prec_str(self.e[0])
 
-    def eval(self):
+    def eval_f(self):
         return -self.e[0]
 
     def simp_f(self):
@@ -381,10 +436,16 @@ class Mult(AssocExp, CommExp, NumExp):
     def nstr(self):
         r = ''
         for i in self.e:
-            r += self.prec_str(i) + ('*' if not lat else '') # should possibly make nstr and lat for this
+            r += self.prec_str(i) + '*'
         return r[:-1]
 
-    def eval(self):
+    def lat(self):
+        r = ''
+        for i in self.e:
+            r += self.prec_str(i)
+        return r
+
+    def eval_f(self):
         if len(self.e) == 0: return 1
         r = self.e[0]
         for i in self.e[1:]: r *= i
@@ -422,12 +483,17 @@ class Mult(AssocExp, CommExp, NumExp):
 
         # convert a a ... a -> a^n
         i = 0
+        xn = AbsSym('')
         while i < len(self.e) - 1:
             j = i + 1
             c = 1
             while j < len(self.e):
                 if self.e[i] == self.e[j]:
                     c += 1
+                    del self.e[j]
+                    j -= 1
+                elif Power(self.e[i], xn) == self.e[j]:
+                    c += xn.img
                     del self.e[j]
                     j -= 1
                 j += 1
@@ -463,12 +529,13 @@ class Fraction(NumExp):
     def prec(self):
         return 2
 
-    def eval(self):
+    def eval_f(self):
         return self.e[0] / self.e[1]
 
     def simp_f(self):
-        if self.e[0] == 1: return self
-        return (self.e[0] * (1/self.e[1])).expand().simplify()
+        if self.e[1] == 1: return self.e[0]
+        return self
+        #return (self.e[0] * (1/self.e[1])).expand().simplify()
         #return (self.e[0] * (self.e[1] ** -1)).expand().simplify()
 
     def __mul__(self, other):
@@ -493,7 +560,7 @@ class Power(NumExp):
     def prec(self):
         return 3
 
-    def eval(self):
+    def eval_f(self):
         return self.e[0] ** self.e[1]
 
     def simp_f(self):
@@ -521,14 +588,16 @@ class ElemFunc(NumExp):
         assert isinstance(x, NumExp) or is_num(x) # maybe not needed (for now needed because of __lat__ in elemfunc)
         super().__init__([x])
         self.f = f
-        self.x = x
+
+    def x(self):
+        return self.e[0]
 
     def prec(self):
         return 4
 
-    def eval(self):
-        if is_num(self.x):
-            return self.f(self.x)
+    def eval_f(self):
+        if is_num(self.x()):
+            return self.f(self.x())
         else:
             return self
 
@@ -536,16 +605,16 @@ class ElemFunc(NumExp):
         return self
 
     def der_rule(self, x):
-        return self.f_der()*der(self.x, x)
+        return self.f_der()*der(self.x(), x)
 
     def f_der(self):
         pass
 
     def nstr(self):
-        return type(self).__name__.lower() + '(' + str(self.x) + ')'
+        return type(self).__name__.lower() + '(' + str(self.x()) + ')'
 
     def lat(self):
-        return type(self).__name__.lower() + '\\left(' + str(self.x) + '\\right)'
+        return type(self).__name__.lower() + '\\left(' + str(self.x()) + '\\right)'
 
 ########### Elementary funtions ###############
 from cmath import sin, cos, tan, atan, exp, log, sqrt
@@ -557,35 +626,38 @@ class Sin(ElemFunc):
         super().__init__(sin, x)
 
     def f_der(self):
-        return Cos(self.x)
+        return Cos(self.x())
 
 class Cos(ElemFunc):
     def __init__(self, x):
         super().__init__(cos, x)
 
     def f_der(self):
-        return -Sin(self.x)
+        return -Sin(self.x())
 
 class Tan(ElemFunc):
     def __init__(self, x):
         super().__init__(tan, x)
 
     def f_der(self):
-        return 1/(Cos(self.x)**2)
+        return 1/(Cos(self.x())**2)
 
 class Atan(ElemFunc):
     def __init__(self, x):
         super().__init__(atan, x)
 
     def f_der(self):
-        return 1/(1+self.x**2)
+        return 1/(1+self.x()**2)
 
 class Exp(ElemFunc):
     def __init__(self, x):
         super().__init__(exp, x)
 
     def f_der(self):
-        return Exp(self.x)
+        return Exp(self.x())
+
+    def lat(self):
+        return 'e^{' + self.prec_str(self.x()) + '}'
 
 class Log(ElemFunc):
     def __init__(self, x):
@@ -599,20 +671,24 @@ class Sqrt(ElemFunc):
         super().__init__(sqrt, x)
 
     def f_der(self):
-        return 1/(2*Sqrt(self.x))
+        return 1/(2*Sqrt(self.x()))
 
     def lat(self):
-        return '\\sqrt{' + self.prec_str(self.x) + '}'
+        return '\\sqrt{' + str(self.x()) + '}'
 
 ###############################################
 
-lat = False
+GLOBAL_LATEX = False
 F = Function
 Q = Fraction
 
-def NS(s):
+def S(s):
     ss = s.split(' ')
-    return (NumSym(i) for i in ss)
+    return NumSym(ss[0]) if len(ss) == 1 else (NumSym(i) for i in ss)
+
+def AS(s):
+    ss = s.split(' ')
+    return NumAbsSym(ss[0]) if len(ss) == 1 else (NumAbsSym(i) for i in ss)
 
 ################ FORMULAE #####################
 
