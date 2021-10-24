@@ -11,3 +11,7 @@ in assoc exp work on identity elements
 make sure that u can use same AbsSym multiple time in comparison expr (and it has one value throughout)
 
 in assoc comparison fix when there are 2 abssym next to each other (first takes 1 element, second others)
+
+fix equality when both assoc, and comm
+
+make partial fraction decomposition (possibly make a FactoredPolynomial class)
