@@ -15,7 +15,10 @@ class ElemFunc(NumExp):
 
     def eval_f(self):
         if is_num(self.x()):
-            return self.f(self.x())
+            k = self.f(self.x())
+            if type(k) != complex and abs(k) < 1e-13:
+                return 0
+            return k
         else:
             return self
 
@@ -36,7 +39,8 @@ class ElemFunc(NumExp):
 
 
 ########### Elementary funtions ###############
-from cmath import sin, cos, tan, atan, exp, log, sqrt
+from math import sin, cos, tan, atan, log, sqrt
+from cmath import exp
 
 
 # power should also maybe be an elem func

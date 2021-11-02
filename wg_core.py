@@ -129,7 +129,7 @@ class Rule:
             return True
         if not isinstance(expr, Expr): return False
         for i in expr.e:
-            if self.check_abs(i): return True
+            if self.check_abs(i): return True  # beacuse this return true early, not all abssym.img are reset, FIX THIS
         return False
 
     def eval(self, expr=None):
@@ -210,4 +210,28 @@ class AssocExp(Expr):
             # i.img = c
             if i != c: return False
             l += 1
+        return True
+
+# both associative and commutative
+class Abelian(AssocExp, CommExp):
+    def __init__(self, e: list):
+        super().__init__(e)
+
+    # again assuming AbsSym is in self, not in other (like in comm and assoc exp)
+    def __eq__(self, other):
+        if type(self) != type(other): return False
+        if len(self.e) > len(other.e): return False
+        #can only have 1 abs_sym in abelian expr
+        k = CommExp.sort_abs(self.e)
+        t = other.e[:]
+        if isinstance(k[-2], AbsSym): raise Exception  # means that at least 2 elements are AbsSym
+        for i in k[:-1]:
+            try: t.remove(i)
+            except: return False
+        if not isinstance(k[-1], AbsSym):
+            if len(t) > 1: return False
+            return k[-1] == t[0]
+        c = copy(self)
+        c.e = t
+        assert k[-1] == c
         return True

@@ -1,6 +1,7 @@
 from wg_num import NumSym, NumAbsSym
 from wg_core import Function
 from wg_numops import Fraction
+from wg_elemfunc import Sin, Cos, Tan, Atan, Exp, Log, Sqrt
 import wg_num
 
 wg_num.GLOBAL_LATEX = True
@@ -19,8 +20,8 @@ def AS(s):
 ################ FORMULAE #####################
 
 def quad(a, b, c):
-    x1 = (-b + (b ** 2 - 4 * a * c) ** (1 / 2)) / (2 * a)
-    x2 = (-b - (b ** 2 - 4 * a * c) ** (1 / 2)) / (2 * a)
+    x1 = (-b + Sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    x2 = (-b - Sqrt(b ** 2 - 4 * a * c)) / (2 * a)
     return (x1, x2)
 
 ################################################

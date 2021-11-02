@@ -1,5 +1,5 @@
 from wg_core import Expr
-from wg_numops import Add
+from wg_numops import Add, Mult
 
 class Polynomial(Expr):
     def __init__(self, *k):
@@ -33,12 +33,37 @@ class Polynomial(Expr):
                 u[n] += self.e[n-m]*other.e[m]
         return Polynomial(*u)
 
+    def __pow__(self, power):
+        p = Polynomial(1)
+        for i in range(power):
+            p *= self
+        return p
+
+class FactoredPolynomial(Expr):
+    def __init__(self, *zeros):
+        super().__init__(list(zeros))
+        self.z = {}
+        for z in zeros:
+            try: self.z[z] += 1
+            except: self.z[z] = 1
+
+    # x : NumExp
+    def as_f(self, x):
+        return Mult(*[(x - i)**self.z[i] for i in self.z.keys()])
+
+    def expand(self):
+        k = Polynomial(1)
+        for i in self.z.keys():
+            k *= Polynomial(1, -i) ** self.z[i]
+        return k
+
 class Rational(Expr):
     def __init__(self, p, q):
         super().__init__([p, q])
 
     # need to make fraction decompositon somehow
+    def pfd(self):
+        assert isinstance(self.e[1], FactoredPolynomial)
+        # FINISH THIS
 
-P = Polynomial
-
-print(P(2, 1)*P(2, 1))
+print(FactoredPolynomial(1, 1).expand())

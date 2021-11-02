@@ -15,3 +15,5 @@ in assoc comparison fix when there are 2 abssym next to each other (first takes 
 fix equality when both assoc, and comm
 
 make partial fraction decomposition (possibly make a FactoredPolynomial class)
+
+add polynomial division

@@ -1,8 +1,8 @@
-from wg_core import AssocExp, CommExp, AbsSym
-from wg_num import NumExp, der
+from wg_core import AssocExp, CommExp, Abelian, AbsSym
+from wg_num import NumExp, der, is_num
 
 
-class Add(AssocExp, CommExp, NumExp):
+class Add(Abelian, NumExp):
     def __init__(self, *e):
         super().__init__(list(e))
 
@@ -12,7 +12,11 @@ class Add(AssocExp, CommExp, NumExp):
     def nstr(self):
         r = ''
         for i in self.e:
-            r += self.prec_str(i) + '+' # can also just str(i) because add is lowest precidence
+            if isinstance(i, Neg) or (is_num(i) and type(i) != complex and i < 0):
+                r = r[:-1]
+                r += '-' + self.prec_str(-i) + '+'
+            else:
+                r += self.prec_str(i) + '+' # can also just str(i) because add is lowest precidence
         return r[:-1]
 
     def eval_f(self):
@@ -88,6 +92,11 @@ class Neg(NumExp):
             return Add(*[-i for i in self.e[0].e])
         return self
 
+    def expand(self):
+        if type(self.e[0]) == Add:
+            return Add(*[-i for i in self.e[0].e])
+        return super().expand()
+
     def __neg__(self):
         return self.e[0]
 
@@ -95,7 +104,7 @@ class Neg(NumExp):
         return -der(self.e[0], x)
 
 
-class Mult(AssocExp, CommExp, NumExp):
+class Mult(Abelian, NumExp):
     def __init__(self, *e):
         super().__init__(list(e))
 
@@ -174,7 +183,6 @@ class Mult(AssocExp, CommExp, NumExp):
             return self.e[0]
         return self
 
-    # maybe expand should be a general function of NumExp
     def expand(self):  # distribute
         for i in self.e:
             if type(i) is Add:

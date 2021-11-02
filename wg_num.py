@@ -46,7 +46,7 @@ class NumExp(Expr):
     def __repr__(self):  # for ipython (notebook)
         if GLOBAL_LATEX:
             from IPython.display import Latex, display
-            display(Latex('$$' + str(self).replace('$$', '') + '$$'))
+            display(Latex('$$' + str(self) + '$$'))
         return super().__repr__()
 
     def __str__(self):
@@ -69,6 +69,15 @@ class NumExp(Expr):
     def der_rule(self, x):
         pass
 
+    def taylor(self, x, x0, n = 1):
+        from math import factorial
+        from wg_numops import Add
+        s = [self | x >> x0]
+        df = self
+        for i in range(1, n+1):
+            df = der(df, x)
+            s.append((df | x >> x0)*(x - x0)**i / factorial(i))
+        return Add(*s)
 
 def is_num(x):
     return type(x) in [int, float, complex]
